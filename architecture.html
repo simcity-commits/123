@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nobichat — Архитектура агентов</title>
+    <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@300;400;500;600;700;800&display=swap"
+          rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --bg-panel: #111827;
+            --bg-card: #1a2235;
+            --bg-card-hover: #1e2a42;
+            --border: #2a3550;
+            --border-accent: #3b4d6e;
+            --text: #e2e8f0;
+            --text-muted: #8494b2;
+            --text-dim: #5a6a8a;
+            --accent-blue: #60a5fa;
+            --accent-purple: #a78bfa;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --accent-teal: #2dd4bf;
+            --accent-pink: #f472b6;
+            --accent-orange: #fb923c;
+            --accent-cyan: #22d3ee;
+            --tool-immediate: #f59e0b;
+            --tool-tollm: #10b981;
+            --agent-color: #a78bfa;
+            --toolgroup-color: #fb923c;
+            --internal-agent: #ec4899;
+            --entry-color: #22d3ee;
+            --internal-tool: #f472b6
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden
+        }
+
+        .app {
+            display: grid;
+            grid-template-columns:1fr 480px;
+            grid-template-rows:56px 1fr;
+            height: 100vh
+        }
+
+        .header {
+            grid-column: 1/-1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-panel)
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -.5px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .logo-divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border)
+        }
+
+        .logo-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 400
+        }
+
+        .header-legend {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%
+        }
+
+        .graph-container {
+            position: relative;
+            overflow: hidden
+        }
+
+        #network {
+            width: 100%;
+            height: 100%;
+            background: var(--bg)
+        }
+
+        .graph-hint {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            font-size: 11px;
+            color: var(--text-dim);
+            background: var(--bg-panel);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            pointer-events: none
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden
+        }
+
+        .panel-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 8px 20px 0;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0
+        }
+
+        .panel-tab {
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all .2s;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .panel-tab:hover {
+            color: var(--text)
+        }
+
+        .panel-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue)
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px 24px
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 6px
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px
+        }
+
+        .detail-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-dim);
+            text-align: center;
+            gap: 12px
+        }
+
+        .detail-empty-icon {
+            font-size: 40px;
+            opacity: .3
+        }
+
+        .detail-empty-text {
+            font-size: 13px;
+            line-height: 1.6
+        }
+
+        .detail-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: -.3px
+        }
+
+        .detail-type-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-bottom: 16px
+        }
+
+        .badge-mode {
+            background: rgba(59, 130, 246, .15);
+            color: var(--accent-blue)
+        }
+
+        .badge-assistant {
+            background: rgba(167, 139, 250, .15);
+            color: var(--accent-purple)
+        }
+
+        .badge-toolgroup {
+            background: rgba(251, 146, 60, .15);
+            color: var(--accent-orange)
+        }
+
+        .badge-tool-immediate {
+            background: rgba(245, 158, 11, .15);
+            color: var(--accent-amber)
+        }
+
+        .badge-tool-tollm {
+            background: rgba(16, 185, 129, .15);
+            color: var(--accent-green)
+        }
+
+        .badge-internal {
+            background: rgba(236, 72, 152, .15);
+            color: var(--accent-pink)
+        }
+
+        .badge-entry {
+            background: rgba(34, 211, 238, .15);
+            color: var(--accent-cyan)
+        }
+
+        .badge-internal-tool {
+            background: rgba(244, 114, 182, .15);
+            color: var(--accent-pink)
+        }
+
+        .detail-section {
+            margin-bottom: 20px
+        }
+
+        .detail-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .detail-description {
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--text-muted)
+        }
+
+        .detail-description strong {
+            color: var(--text);
+            font-weight: 600
+        }
+
+        .params-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px
+        }
+
+        .params-table th {
+            text-align: left;
+            padding: 6px 10px;
+            font-weight: 600;
+            color: var(--text-dim);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .params-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(42, 53, 80, .5);
+            vertical-align: top
+        }
+
+        .param-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-blue);
+            font-weight: 500
+        }
+
+        .param-type {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent-purple)
+        }
+
+        .param-desc {
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.5
+        }
+
+        .return-behavior-box {
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.7;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px
+        }
+
+        .rb-immediate {
+            background: rgba(245, 158, 11, .08);
+            border: 1px solid rgba(245, 158, 11, .2)
+        }
+
+        .rb-tollm {
+            background: rgba(16, 185, 129, .08);
+            border: 1px solid rgba(16, 185, 129, .2)
+        }
+
+        .rb-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+            margin-top: 1px
+        }
+
+        .rb-text {
+            color: var(--text-muted)
+        }
+
+        .rb-text strong {
+            color: var(--text)
+        }
+
+        .rb-example {
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: rgba(0, 0, 0, .2);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--text-dim);
+            font-style: italic
+        }
+
+        .rb-example strong {
+            color: var(--text-muted);
+            font-style: normal
+        }
+
+        .prompt-placeholder {
+            background: var(--bg-card);
+            border: 1px dashed var(--border-accent);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            color: var(--text-muted);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 500px;
+            overflow-y: auto
+        }
+
+        .prompt-placeholder::-webkit-scrollbar {
+            width: 4px
+        }
+
+        .prompt-placeholder::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px
+        }
+
+        .connection-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .connection-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background .15s
+        }
+
+        .connection-item:hover {
+            background: var(--bg-card-hover)
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0
+        }
+
+        .connection-name {
+            color: var(--text);
+            font-weight: 500
+        }
+
+        .template-var-item {
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            border-left: 3px solid var(--accent-purple)
+        }
+
+        .template-var-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-purple);
+            font-weight: 500
+        }
+
+        .template-var-desc {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 3px;
+            line-height: 1.5
+        }
+
+        .example-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px
+        }
+
+        .example-msg {
+            padding: 8px 12px;
+            background: rgba(34, 211, 238, .06);
+            border: 1px solid rgba(34, 211, 238, .15);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-style: italic
+        }
+
+        .example-msg::before {
+            content: '💬 ';
+            font-style: normal
+        }
+
+        .catalog-search {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: 'Manrope', sans-serif;
+            font-size: 13px;
+            outline: none;
+            margin-bottom: 16px;
+            transition: border-color .2s
+        }
+
+        .catalog-search:focus {
+            border-color: var(--accent-blue)
+        }
+
+        .catalog-search::placeholder {
+            color: var(--text-dim)
+        }
+
+        .catalog-group {
+            margin-bottom: 20px
+        }
+
+        .catalog-group-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .catalog-group-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border)
+        }
+
+        .catalog-item {
+            padding: 10px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all .15s
+        }
+
+        .catalog-item:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent)
+        }
+
+        .catalog-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px
+        }
+
+        .catalog-item-name {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace
+        }
+
+        .catalog-item-badge {
+            font-size: 9px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            flex-shrink: 0
+        }
+
+        .catalog-item-desc {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">NOBICHAT</div>
+            <div class="logo-divider"></div>
+            <div class="logo-subtitle">Архитектура агентов и инструментов</div>
+        </div>
+        <div class="header-legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--entry-color)"></div>
+                Точка входа
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--accent-blue)"></div>
+                Режим
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--agent-color)"></div>
+                Агент
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--toolgroup-color)"></div>
+                Группа тулов
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--tool-tollm)"></div>
+                Tool → LLM
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--tool-immediate)"></div>
+                Tool → IMMEDIATE
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--internal-agent)"></div>
+                Генератор кода
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:var(--internal-tool)"></div>
+                Внутренний тул
+            </div>
+        </div>
+    </header>
+    <div class="graph-container">
+        <div id="network"></div>
+        <div class="graph-hint">Нажмите на узел для просмотра деталей · Колёсико мыши для масштабирования · Двойной клик
+            для фокуса
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-tabs">
+            <div class="panel-tab active" data-tab="detail" onclick="switchTab('detail')">Детали</div>
+            <div class="panel-tab" data-tab="catalog" onclick="switchTab('catalog')">Каталог</div>
+        </div>
+        <div class="panel-content" id="panel-detail">
+            <div class="detail-empty" id="detail-empty">
+                <div class="detail-empty-icon">◎</div>
+                <div class="detail-empty-text">Выберите узел на графе<br>для просмотра деталей</div>
+            </div>
+            <div id="detail-content" style="display:none"></div>
+        </div>
+        <div class="panel-content" id="panel-catalog" style="display:none">
+            <input type="text" class="catalog-search" placeholder="Поиск по названию или описанию..."
+                   oninput="filterCatalog(this.value)">
+            <div id="catalog-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ SYSTEM PROMPTS (hidden textareas — safe container for HTML/JS content) ═══ -->
+
+<textarea id="prompt-free-agent" style="display:none">Ты — ассистент платформы Nobichat для создания и запуска бизнес-сценариев.
+
+Доступные инструменты:
+
+=== Создание и запуск ===
+1. createScenario(name, description) — создаёт новый сценарий.
+   - name: краткое уникальное название на русском (3-5 слов)
+   - description: полное описание (шаги, логика, какие данные)
+   БД и структура таблиц подключены автоматически.
+   ЗАПРЕЩЕНО: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE SCHEMA.
+   НЕ спрашивай у пользователя креды, DDL или структуру таблиц.
+   Если пользователь не дал явное название — придумай краткое и понятное.
+
+2. runScenario(scenarioName) — запускает существующий сценарий.
+
+=== Информация ===
+3. inspectScenarioSpec(scenarioName) — описание, версия, метаданные сценария
+4. inspectScenarioCode(scenarioName, side) — исходный код (backend/frontend/both)
+5. listScenarioVersions(scenarioName) — история версий с описанием изменений
+
+=== Редактирование ===
+6. createUpdateDraft(scenarioName, proposedChangesDescription) — формирует черновик изменений.
+   ОБЯЗАТЕЛЬНО: после вызова покажи пользователю пронумерованный план
+   изменений и спроси подтверждение. Без подтверждения НЕ вызывай commitUpdate.
+   При итеративных уточнениях от пользователя вызывай createUpdateDraft заново
+   с ПОЛНЫМ агрегированным списком ВСЕХ изменений.
+
+7. commitUpdate(scenarioName) — применяет черновик. ТОЛЬКО после подтверждения пользователя.
+
+8. rollbackToVersion(scenarioName, versionNumber) — создаёт черновик отката.
+   ОБЯЗАТЕЛЬНО: после вызова покажи детали отката и спроси подтверждение.
+   Для применения используй commitUpdate.
+
+=== Жизненный цикл ===
+9. restartScenario(scenarioName) — перезапуск без изменений кода
+10. stopScenario(scenarioName) — остановка, возврат в свободный режим
+11. deleteScenario(scenarioName) — удаление (спроси подтверждение перед вызовом)
+12. duplicateScenario(scenarioName, newName) — копирование сценария
+
+=== Шедулеры (фоновые задачи) ===
+13. createScheduler(name, description) — создаёт и запускает фоновую задачу по расписанию.
+14. stopScheduler(schedulerName) — останавливает шедулер.
+15. startScheduler(schedulerName) — запускает остановленный шедулер.
+16. deleteScheduler(schedulerName) — удаляет шедулер (спроси подтверждение).
+17. inspectScheduler(schedulerName) — информация о шедулере.
+18. editScheduler(schedulerName, changes) — редактирует код шедулера и перезапускает.
+
+Доступные шедулеры:
+{{schedulerList}}
+
+Правила:
+- Не показывай пользователю технические детали
+- Если описание слишком размытое — уточни
+- Отвечай кратко и по делу
+- Для РЕДАКТИРОВАНИЯ: сначала createUpdateDraft → план → подтверждение → commitUpdate
+- Для ОТКАТА: сначала rollbackToVersion → детали → подтверждение → commitUpdate
+- НИКОГДА не вызывай commitUpdate без предварительного createUpdateDraft или rollbackToVersion
+- НИКОГДА не вызывай commitUpdate без явного подтверждения пользователя
+- Используй знания из онтологии для понимания предметной области
+
+Доступные сценарии:
+{{scenarioList}}
+
+Онтология (описание предметной области):
+{{ontology}}
+
+DDL-схема текущей базы данных:
+{{ddl}}</textarea>
+
+<textarea id="prompt-execution-agent" style="display:none">Ты — ассистент платформы Nobichat. Сейчас у пользователя запущен сценарий.
+
+Информация о текущем сценарии:
+- Название: {{scenarioName}}
+- Описание: {{scenarioDescription}}
+
+Доступные инструменты:
+
+=== Информация ===
+1. inspectScenarioSpec(scenarioName) — описание, версия, метаданные сценария
+2. inspectScenarioCode(scenarioName, side) — исходный код (backend/frontend/both)
+3. listScenarioVersions(scenarioName) — история версий
+
+=== Редактирование ===
+4. createUpdateDraft(scenarioName, proposedChangesDescription) — формирует черновик изменений.
+   ОБЯЗАТЕЛЬНО: после вызова покажи пользователю пронумерованный план изменений и спроси подтверждение.
+5. commitUpdate(scenarioName) — применяет черновик. ТОЛЬКО после подтверждения пользователя.
+6. rollbackToVersion(scenarioName, versionNumber) — создаёт черновик отката.
+   ОБЯЗАТЕЛЬНО: после вызова покажи пользователю детали отката и спроси подтверждение.
+   Для применения используй commitUpdate.
+
+=== Жизненный цикл ===
+7. restartScenario(scenarioName) — перезапуск без изменений
+8. stopScenario(scenarioName) — остановка, возврат в свободный режим
+9. deleteScenario(scenarioName) — удаление (спроси подтверждение перед вызовом)
+10. duplicateScenario(scenarioName, newName) — копирование сценария
+
+=== Шедулеры (фоновые задачи) ===
+11. createScheduler(name, description) — создаёт и запускает фоновую задачу по расписанию.
+12. stopScheduler(schedulerName) — останавливает шедулер.
+13. startScheduler(schedulerName) — запускает остановленный шедулер.
+14. deleteScheduler(schedulerName) — удаляет шедулер (спроси подтверждение).
+15. inspectScheduler(schedulerName) — информация о шедулере.
+16. editScheduler(schedulerName, changes) — редактирует код шедулера и перезапускает.
+
+Доступные шедулеры:
+{{schedulerList}}
+
+Правила:
+- Название текущего сценария: {{scenarioName}} — используй его при вызове инструментов
+- Для редактирования ОБЯЗАТЕЛЬНО: сначала createUpdateDraft, потом подтверждение, потом commitUpdate
+- Для отката ОБЯЗАТЕЛЬНО: сначала rollbackToVersion, потом подтверждение, потом commitUpdate
+- НИКОГДА не вызывай commitUpdate без предварительного createUpdateDraft или rollbackToVersion
+- НИКОГДА не вызывай commitUpdate без явного подтверждения пользователя
+- Отвечай кратко и по делу
+
+Доступные сценарии:
+{{scenarioList}}</textarea>
+
+<textarea id="prompt-fullstack-agent" style="display:none">Ты — fullstack-разработчик. По описанию пользователя генерируешь
+полноценное приложение: бэкенд (Node.js/Express) и фронтенд (React).
+
+Приложение — это пошаговый бизнес-сценарий (wizard).
+ПРИЛОЖЕНИЕ ДОЛЖНО БЫТЬ САМОДОСТАТОЧНЫМ И РАБОТАТЬ 100%% в браузере!
+
+══════════════════════════════════════
+ФОРМАТ ОТВЕТА
+══════════════════════════════════════
+
+Ответ СТРОГО чистый код бэкенда и фронтенда.
+Никаких пояснений, комментариев вне кода и т.д..
+
+BACKEND:
+module.exports = ({ db, logger }) => {
+  const router = require('express').Router();
+  // ... роуты
+  return router;
+};
+
+FRONTEND:
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+...
+&lt;/html&gt;
+
+══════════════════════════════════════
+ПРАВИЛА ФРОНТЕНДА
+══════════════════════════════════════
+
+Самодостаточная HTML-страница. Обязательно подключи в &lt;head&gt;:
+
+&lt;script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"&gt;&lt;/script&gt;
+&lt;script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"&gt;&lt;/script&gt;
+&lt;script src="https://unpkg.com/@babel/standalone/babel.min.js"&gt;&lt;/script&gt;
+
+Весь React-код пиши внутри &lt;script type="text/babel"&gt;.
+
+API бэкенда сценария вызывай через fetch по относительному пути './api/...'
+ИСКЛЮЧЕНИЕ: state API вызывается через абсолютный путь (см. ниже).
+
+Стили:
+- Используй чистый CSS в &lt;style&gt; теге
+- Делай аккуратный, современный UI
+- Таблицы с border-collapse, padding
+- Кнопки с padding, border-radius, цветом
+- Формы с label, input со стилями
+
+══════════════════════════════════════
+ПРАВИЛА УПРАВЛЕНИЯ СОСТОЯНИЕМ (ОБЯЗАТЕЛЬНО!)
+══════════════════════════════════════
+
+КРИТИЧЕСКИ ВАЖНО: используй ТОЛЬКО описанный ниже паттерн для основного состояния.
+Любое отклонение приведёт к потере данных при навигации и перезагрузке.
+
+1. ЕДИНЫЙ КОНТЕКСТ ПРИЛОЖЕНИЯ (STATE) В APP:
+   Весь App имеет ОДИН объект appContext (для любых персистентных данных сценария)
+   и ОДИН currentStep (для навигации по шагам).
+
+   function App() {
+       const [currentStep, setCurrentStep] = React.useState(0);
+       const [appContext, setAppContext] = React.useState({});
+       const [isLoading, setIsLoading] = React.useState(true);
+
+       const stateUrl = React.useMemo(() => {
+           const apiBase = window.__NOBICHAT_API_URL__ || '';
+           const parts = window.location.pathname.split('/');
+           const appsIdx = parts.indexOf('apps');
+           const sessionsIdx = parts.indexOf('sessions');
+           if (appsIdx === -1 || sessionsIdx === -1) return null;
+           const scenarioId = parts[appsIdx + 1];
+           const sessionId = parts[sessionsIdx + 1];
+           return apiBase + '/api/runtime/scenarios/' + scenarioId + '/sessions/' + sessionId + '/state';
+       }, []);
+
+       React.useEffect(() => {
+           if (!stateUrl) { setIsLoading(false); return; }
+           fetch(stateUrl)
+               .then(r => r.ok ? r.json() : {})
+               .then(data => {
+                   if (data &amp;&amp; typeof data === 'object' &amp;&amp; Object.keys(data).length > 0) {
+                       setCurrentStep(data.currentStep || 0);
+                       setAppContext(data.appContext || data.formData || {});
+                   }
+               })
+               .catch(() => {})
+               .finally(() => setIsLoading(false));
+       }, [stateUrl]);
+
+       const saveTimerRef = React.useRef(null);
+       React.useEffect(() => {
+           if (isLoading || !stateUrl) return;
+           if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+           saveTimerRef.current = setTimeout(() => {
+               fetch(stateUrl, {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ currentStep, appContext })
+               }).catch(() => {});
+           }, 500);
+           return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+       }, [currentStep, appContext, isLoading, stateUrl]);
+
+       const updateAppContext = React.useCallback((newValues) => {
+           setAppContext(prev => ({ ...prev, ...newValues }));
+       }, []);
+
+       if (isLoading) {
+           return React.createElement('div', {
+               style: { display: 'flex', justifyContent: 'center',
+                        alignItems: 'center', height: '100vh' }
+           }, 'Загрузка...');
+       }
+
+       const steps = [Step1, Step2];
+       const CurrentStepComponent = steps[currentStep] || steps[0];
+       const goNext = () => setCurrentStep(prev => prev + 1);
+       const goBack = () => setCurrentStep(prev => prev - 1);
+
+       return React.createElement('div', { className: 'container' },
+           React.createElement(CurrentStepComponent, { appContext, updateAppContext }),
+           React.createElement('div', { className: 'navigation' },
+               currentStep > 0 &amp;&amp; React.createElement('button', { className: 'btn', onClick: goBack }, 'Назад'),
+               currentStep &lt; steps.length - 1 &amp;&amp; React.createElement('button', { className: 'btn btn-primary', onClick: goNext }, 'Далее')
+           )
+       );
+   }
+
+2. КОМПОНЕНТЫ-ЭКРАНЫ ПОЛУЧАЮТ ДАННЫЕ ЧЕРЕЗ PROPS:
+   Каждый компонент-экран — это функция с параметрами { appContext, updateAppContext }.
+   Экран читает данные из appContext и записывает через updateAppContext.
+
+   function Step1({ appContext, updateAppContext }) {
+       return (
+           &lt;div&gt;
+               &lt;input
+                   value={appContext.name || ''}
+                   onChange={e => updateAppContext({ name: e.target.value })}
+               /&gt;
+           &lt;/div&gt;
+       );
+   }
+
+3. НАВИГАЦИЯ:
+   Кнопки "Назад" и "Далее" только меняют currentStep.
+   appContext НЕ очищается при навигации.
+
+4. ДАННЫЕ С СЕРВЕРА (КЭШИРОВАНИЕ):
+   Если экран загружает данные с бэкенда, сохраняй их в appContext.
+
+   React.useEffect(() => {
+       if (!appContext.items) {
+           fetch('./api/items')
+               .then(r => r.json())
+               .then(items => updateAppContext({ items }));
+       }
+   }, []);
+
+5. ЛОКАЛЬНОЕ СОСТОЯНИЕ (useState):
+   Разрешено для временного UI-состояния (модалки, лоадеры, ошибки валидации).
+
+6. localStorage/sessionStorage:
+   Разрешено для кэша справочников и настроек UI.
+   НЕ ИСПОЛЬЗУЙ для основного бизнес-контекста (appContext).
+
+7. СТАБИЛЬНОСТЬ ССЫЛОК:
+   updateAppContext ОБЯЗАТЕЛЬНО оборачивай в React.useCallback(fn, []).
+
+══════════════════════════════════════
+КРИТИЧЕСКИ ВАЖНЫЕ ОГРАНИЧЕНИЯ И ПРАВИЛА
+══════════════════════════════════════
+
+- НЕ пиши свои эндпоинты для сохранения/загрузки состояния wizard'а.
+- Хардкод URL бэкенда — используй ТОЛЬКО window.__NOBICHAT_API_URL__.
+- fetch('./api/_state') или другие относительные пути для state API ЗАПРЕЩЕНЫ.
+
+══════════════════════════════════════
+ПРАВИЛА БЭКЕНДА И ДОСТУПНЫЕ МОДУЛИ
+══════════════════════════════════════
+
+Тебе доступны через аргумент функции:
+- db — объект для работы с PostgreSQL (pg Pool).
+  Вызов: const result = await db.query(sql, params);
+  Результат: result.rows (массив объектов), result.rowCount (число)
+- logger — объект с методами info(msg), warn(msg), error(msg)
+
+Доступные npm-пакеты:
+1. Базовые: express, cors, multer, uuid, lodash, async.
+2. Сеть и HTTP: axios, node-fetch, form-data, qs.
+3. Даты и математика: moment, date-fns, mathjs.
+4. Валидация: joi, zod, validator, libphonenumber-js.
+5. Безопасность: bcryptjs, jsonwebtoken, crypto-js, sanitize-html.
+6. Файлы (Excel/CSV): exceljs, xlsx, csv-parser, json2csv, papaparse.
+7. Файлы (PDF/ZIP/Изображения): pdfkit, archiver, jimp.
+8. Парсинг (XML/HTML): xml2js, xmlbuilder, cheerio, marked.
+9. Утилиты БД: pg-format, sqlstring, node-cache.
+10. Почта: nodemailer.
+11. Шаблонизаторы: handlebars, mustache.
+
+КРИТИЧЕСКИЕ ОГРАНИЧЕНИЯ:
+- ЗАПРЕЩЕНО использовать пакеты вне списка.
+- ЗАПРЕЩЕНО: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE SCHEMA.
+- Используй таблицы и колонки ТОЧНО как в DDL.
+
+══════════════════════════════════════
+ПРАВИЛА ИНТЕГРАЦИИ (Фронтенд &lt;-&gt; Бэкенд)
+══════════════════════════════════════
+
+1. СОВПАДЕНИЕ ЭНДПОИНТОВ: фронтенд ОБЯЗАН вызывать ТОЧНО те же URL.
+2. СОВПАДЕНИЕ ПОЛЕЙ: JSON-поля в fetch body ОБЯЗАНЫ совпадать с req.body.
+3. Перед генерацией фронтенда мысленно перечисли ВСЕ эндпоинты бэкенда.
+4. Только код, без пояснений.
+5. Не используй import/export в браузерном коде.
+6. React, ReactDOM доступны как глобальные переменные.
+
+══════════════════════════════════════
+РЕЖИМ РЕДАКТИРОВАНИЯ (добавляется при editCode)
+══════════════════════════════════════
+
+Тебе предоставлен ТЕКУЩИЙ КОД приложения (бэкенд и фронтенд).
+Внеси ТОЛЬКО запрошенные изменения.
+Сохрани ВСЮ остальную логику, структуру, стили, эндпоинты без изменений.
+
+ОБЯЗАТЕЛЬНО СОХРАНИ:
+- Единый appContext и currentStep в App.
+- Компоненты-экраны получают данные через props.
+- stateUrl вычисляется через window.__NOBICHAT_API_URL__.
+- Debounce-сохранение стейта через saveTimerRef.
+- Все вызовы fetch('./api/...') через относительные пути.
+
+ВАЖНО: после генерации кода ОБЯЗАТЕЛЬНО вызови функцию save_generated_code.</textarea>
+
+<textarea id="prompt-scheduler-agent" style="display:none">Ты — backend-разработчик. По описанию пользователя генерируешь
+фоновую задачу (scheduler) на Node.js.
+
+══════════════════════════════════════
+ФОРМАТ ОТВЕТА
+══════════════════════════════════════
+
+Ответ СТРОГО в формате одного кода, без пояснений:
+
+SCHEDULER:
+module.exports = ({ db, logger, cron }) => {
+  cron.schedule('*/5 * * * * *', async () => {
+    try {
+      // ... логика задачи
+    } catch (err) {
+      logger.error('Scheduler error: ' + err.message);
+    }
+  });
+};
+
+══════════════════════════════════════
+ПРАВИЛА
+══════════════════════════════════════
+
+1. Функция получает { db, logger, cron }:
+   - db — pg Pool, вызов: await db.query(sql, params)
+   - logger — объект с методами info, warn, error
+   - cron — библиотека node-cron, используй cron.schedule(expression, callback)
+
+2. cron-выражение определяй из описания пользователя:
+   - "каждые 5 секунд" → '*/5 * * * * *'
+   - "каждую минуту" → '* * * * *'
+   - "каждый час" → '0 * * * *'
+   - "каждый день в 9:00" → '0 9 * * *'
+
+3. Доступные npm-пакеты (подключай через require):
+   axios, node-fetch, moment, date-fns, lodash, uuid,
+   nodemailer, handlebars, mustache, crypto-js,
+   xml2js, cheerio, pg-format, validator, joi, zod
+
+4. КРИТИЧЕСКИЕ ОГРАНИЧЕНИЯ:
+   - ЗАПРЕЩЕНО: CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE SCHEMA
+   - Используй названия таблиц и колонок ТОЧНО как в DDL
+   - Оборачивай логику в try/catch
+   - Логируй ключевые действия через logger
+
+5. Только код, без пояснений
+
+══════════════════════════════════════
+РЕЖИМ РЕДАКТИРОВАНИЯ (добавляется при editCode)
+══════════════════════════════════════
+
+Тебе предоставлен ТЕКУЩИЙ КОД шедулера.
+Внеси ТОЛЬКО запрошенные изменения.
+Верни ПОЛНЫЙ обновлённый код через вызов функции save_scheduler_code.</textarea>
+
+<script>
+    const SYSTEM_PROMPTS = {
+        freeAgent: document.getElementById('prompt-free-agent').value,
+        executionAgent: document.getElementById('prompt-execution-agent').value,
+        fullStackAgent: document.getElementById('prompt-fullstack-agent').value,
+        schedulerAgent: document.getElementById('prompt-scheduler-agent').value
+    };
+
+    const DATA = {
+        entry: {
+            'entry-point': {
+                id: 'entry-point',
+                name: 'Сообщение пользователя',
+                type: 'entry',
+                description: 'Пользователь отправляет текстовое сообщение в чат Nobichat. Сообщение может содержать запрос на создание сценария, вопрос о текущем сценарии, команду на редактирование и т.д. К сообщению могут быть приложены изображения (макеты интерфейса, схемы).',
+                examples: ['Создай сценарий для регистрации участников вебинара', 'Измени цвет кнопки «Далее» на синий', 'Покажи историю версий сценария'],
+                routingLogic: 'Система проверяет текущий режим сессии пользователя (поле session_mode в таблице user_chat_sessions). Если у пользователя уже запущен сценарий (session_mode = EXECUTION и active_scenario_id заполнен) — сообщение направляется в ExecutionAgent. Иначе — в FreeAgent.'
+            }
+        },
+        modes: {
+            FREE: {
+                id: 'mode-free',
+                name: 'FREE',
+                type: 'mode',
+                description: 'Свободный режим. Пользователь может создавать, запускать, редактировать сценарии и шедулеры. Активируется по умолчанию при создании новой сессии или после остановки сценария. В таблице user_chat_sessions поле session_mode = \'FREE\', а active_scenario_id = NULL.',
+                agent: 'agent-free'
+            },
+            EXECUTION: {
+                id: 'mode-exec',
+                name: 'EXECUTION',
+                type: 'mode',
+                description: 'Режим выполнения. Активируется когда у пользователя запущен конкретный сценарий. В таблице user_chat_sessions поле session_mode = \'EXECUTION\', а active_scenario_id содержит UUID запущенного сценария. Если сценарий удалён из таблицы generated_scenarios — автоматический откат в FREE.',
+                agent: 'agent-exec'
+            }
+        },
+        assistants: {
+            'agent-free': {
+                id: 'agent-free',
+                name: 'FreeAgent',
+                type: 'assistant',
+                description: 'Агент свободного режима. Представляет собой системный промпт + набор подключённых тулов. Получает сообщение пользователя, контекст (списки сценариев, онтологию, DDL, шедулеры) и приложенные изображения. На основе системного промпта и доступных тулов самостоятельно решает, какое действие выполнить. Имеет доступ ко ВСЕМ группам тулов: FreeModeTools, ScenarioManagementTools, SchedulerManagementTools.',
+                systemPrompt: SYSTEM_PROMPTS.freeAgent,
+                templateVars: [{
+                    name: 'scenarioList',
+                    desc: 'Список всех сценариев из таблицы generated_scenarios: название (name), текущая версия (current_version), краткое описание (description). Только активные (is_active = true).'
+                }, {
+                    name: 'ontology',
+                    desc: 'Описание предметной области — загружается из markdown-файлов в папке ресурсов (сущности: Вебинар, Контакт, Компания, Спикер и др.; связи между ними; справочники). Помогает LLM понимать бизнес-контекст.'
+                }, {
+                    name: 'ddl',
+                    desc: 'DDL-схема базы данных — полная SQL-структура всех таблиц (company, contact, webinar, speaker, product, webinar_participant и т.д.). Загружается из файла schema.sql.'
+                }, {
+                    name: 'schedulerList',
+                    desc: 'Список всех шедулеров из таблицы generated_schedulers: название (name), версия (current_version), статус (status: ACTIVE/STOPPED).'
+                }],
+                memory: 'Каждая сессия чата имеет отдельную историю переписки, привязанную к ID сессии. История хранится в базе данных и автоматически подгружается при каждом обращении. Окно памяти — последние 1000 сообщений, более старые сообщения отбрасываются.',
+                toolGroups: ['tg-free', 'tg-scenario', 'tg-scheduler']
+            }, 'agent-exec': {
+                id: 'agent-exec',
+                name: 'ExecutionAgent',
+                type: 'assistant',
+                description: 'Агент режима выполнения. Представляет собой системный промпт + набор подключённых тулов. Активируется когда у пользователя запущен конкретный сценарий. Получает название и описание активного сценария в контексте. НЕ получает изображения. Имеет доступ к ScenarioManagementTools и SchedulerManagementTools (без FreeModeTools — нельзя создавать новые сценарии, пока один уже запущен).',
+                systemPrompt: SYSTEM_PROMPTS.executionAgent,
+                templateVars: [{
+                    name: 'scenarioName',
+                    desc: 'Название текущего запущенного сценария — берётся из таблицы generated_scenarios по active_scenario_id текущей сессии (поле name).'
+                }, {
+                    name: 'scenarioDescription',
+                    desc: 'Описание текущего сценария — поле description из таблицы generated_scenarios.'
+                }, {
+                    name: 'scenarioList',
+                    desc: 'Список всех активных сценариев из таблицы generated_scenarios (is_active = true): название, версия, краткое описание.'
+                }, {
+                    name: 'schedulerList',
+                    desc: 'Список всех шедулеров из таблицы generated_schedulers: название, версия, статус.'
+                }],
+                memory: 'Каждая сессия чата имеет отдельную историю переписки, привязанную к ID сессии. История хранится в базе данных и автоматически подгружается при каждом обращении. Окно памяти — последние 1000 сообщений.',
+                toolGroups: ['tg-scenario', 'tg-scheduler']
+            }
+        },
+        internalAgents: {
+            'agent-fullstack': {
+                id: 'agent-fullstack',
+                name: 'FullStackAgent',
+                type: 'internal-agent',
+                description: 'Генератор кода для сценариев. AI-агент, который по текстовому описанию генерирует полноценное fullstack-приложение: бэкенд на Node.js/Express и фронтенд на React. Используется при создании нового сценария и при редактировании существующего. Может принимать приложенные изображения (макеты интерфейса) как референс.',
+                systemPrompt: SYSTEM_PROMPTS.fullStackAgent,
+                internalTool: {
+                    id: 'itool-save-code',
+                    name: 'save_generated_code',
+                    type: 'internal-tool',
+                    description: 'Внутренний тул, через который FullStackAgent возвращает результат генерации. LLM обязана вызвать этот тул, передав полный код бэкенда и фронтенда. Результат сохраняется в таблицу generated_scenarios (поля backend_code и frontend_code).',
+                    parentAgent: 'FullStackAgent',
+                    params: [{
+                        name: 'backendCode',
+                        type: 'String',
+                        desc: 'Полный код бэкенда Node.js/Express. Формат: module.exports = ({ db, logger }) => { ... return router; };'
+                    }, {
+                        name: 'frontendCode',
+                        type: 'String',
+                        desc: 'Полная самодостаточная HTML-страница с React 18, включая CSS и Babel-скрипты'
+                    }]
+                }
+            },
+            'agent-scheduler': {
+                id: 'agent-scheduler',
+                name: 'SchedulerAgent',
+                type: 'internal-agent',
+                description: 'Генератор кода для шедулеров. AI-агент, который по описанию генерирует фоновую задачу на Node.js с использованием библиотеки node-cron. Используется при создании нового шедулера и при редактировании существующего.',
+                systemPrompt: SYSTEM_PROMPTS.schedulerAgent,
+                internalTool: {
+                    id: 'itool-save-scheduler',
+                    name: 'save_scheduler_code',
+                    type: 'internal-tool',
+                    description: 'Внутренний тул, через который SchedulerAgent возвращает результат генерации. LLM обязана вызвать этот тул, передав полный код шедулера. Результат сохраняется в таблицу generated_schedulers (поле scheduler_code).',
+                    parentAgent: 'SchedulerAgent',
+                    params: [{
+                        name: 'schedulerCode',
+                        type: 'String',
+                        desc: 'Полный код шедулера Node.js. Формат: module.exports = ({ db, logger, cron }) => { ... };'
+                    }]
+                }
+            }
+        },
+        toolGroups: {
+            'tg-free': {
+                id: 'tg-free',
+                name: 'FreeModeTools',
+                type: 'toolgroup',
+                description: 'Тулы для создания и запуска сценариев. Доступны ТОЛЬКО в FreeAgent (свободный режим). В режиме выполнения (ExecutionAgent) эти тулы недоступны.',
+                tools: ['tool-createScenario', 'tool-runScenario'],
+                onlyIn: ['agent-free']
+            },
+            'tg-scenario': {
+                id: 'tg-scenario',
+                name: 'ScenarioManagementTools',
+                type: 'toolgroup',
+                description: 'Тулы для инспекции, редактирования, отката, перезапуска, остановки, удаления и копирования сценариев. Доступны в обоих агентах (FreeAgent и ExecutionAgent).',
+                tools: ['tool-inspectSpec', 'tool-inspectCode', 'tool-listVersions', 'tool-createDraft', 'tool-commitUpdate', 'tool-rollback', 'tool-restart', 'tool-stop', 'tool-delete', 'tool-duplicate'],
+                onlyIn: ['agent-free', 'agent-exec']
+            },
+            'tg-scheduler': {
+                id: 'tg-scheduler',
+                name: 'SchedulerManagementTools',
+                type: 'toolgroup',
+                description: 'Тулы для создания, управления и редактирования шедулеров (фоновых cron-задач). Доступны в обоих агентах.',
+                tools: ['tool-createScheduler', 'tool-stopScheduler', 'tool-startScheduler', 'tool-deleteScheduler', 'tool-inspectScheduler', 'tool-editScheduler'],
+                onlyIn: ['agent-free', 'agent-exec']
+            }
+        },
+        tools: {
+            'tool-createScenario': {
+                id: 'tool-createScenario',
+                name: 'createScenario',
+                group: 'tg-free',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Создаёт новый бизнес-сценарий по описанию пользователя. Вызывается когда пользователь хочет создать, сгенерировать или спроектировать новый сценарий, процесс или приложение.',
+                params: [{
+                    name: 'name',
+                    type: 'String',
+                    desc: 'Краткое название сценария на русском (3-5 слов), например «Регистрация заявок»'
+                }, {
+                    name: 'description',
+                    type: 'String',
+                    desc: 'Полное максимально подробное, структурированное описание сценария: что делает, какие шаги, какие данные, бизнес-логика'
+                }],
+                immediateAction: '1. Проверяет уникальность названия в таблице generated_scenarios (поле name, регистронезависимо).\n2. Запускает FullStackAgent для генерации кода бэкенда и фронтенда.\n3. Сохраняет результат в таблицу generated_scenarios: name, description, backend_code, frontend_code, is_active = true, current_version = 1.\n4. Отправляет код на Runtime-сервер для деплоя.\n5. Переводит сессию в EXECUTION: обновляет session_mode и active_scenario_id в таблице user_chat_sessions.\n6. Формирует фиксированный ответ пользователю с URL сценария.\n\nПри ошибке деплоя: код остаётся в БД, пользователю возвращается сообщение об ошибке.',
+                immediateExample: "Сценарий 'Регистрация участников' создан и успешно запущен! Начинаем выполнение.",
+                usedBy: ['agent-free']
+            },
+            'tool-runScenario': {
+                id: 'tool-runScenario',
+                name: 'runScenario',
+                group: 'tg-free',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Запускает существующий сценарий по названию.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария из списка доступных'}],
+                immediateAction: '1. Ищет сценарий в таблице generated_scenarios по полю name (регистронезависимо, только is_active = true).\n2. Переводит сессию в EXECUTION: обновляет session_mode и active_scenario_id.\n3. Формирует ответ с URL сценария.',
+                immediateExample: "Запущен сценарий: Регистрация участников",
+                usedBy: ['agent-free']
+            },
+            'tool-inspectSpec': {
+                id: 'tool-inspectSpec',
+                name: 'inspectScenarioSpec',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Возвращает описание, текущую версию и метаданные сценария. Используется когда пользователь спрашивает что делает сценарий, какая версия, когда создан.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                returnToLLM: 'Текстовая строка с данными из таблицы generated_scenarios: name (название), current_version (версия), description (описание), created_date (дата создания), last_updated_date (последнее обновление).',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-inspectCode': {
+                id: 'tool-inspectCode',
+                name: 'inspectScenarioCode',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Возвращает исходный код сценария (бэкенд, фронтенд или оба). Используется для точечных вопросов: «где баг?», «какой цвет у кнопки?», «какие эндпоинты есть?»',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}, {
+                    name: 'side',
+                    type: 'String',
+                    desc: "Какую часть кода: 'backend', 'frontend' или 'both'"
+                }],
+                returnToLLM: 'Полный исходный код — поля backend_code и/или frontend_code из таблицы generated_scenarios. LLM анализирует код и отвечает на вопрос пользователя.',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-listVersions': {
+                id: 'tool-listVersions',
+                name: 'listScenarioVersions',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Возвращает историю версий сценария с описанием изменений. Используется когда пользователь спрашивает что менялось, какие версии есть.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                returnToLLM: 'Список версий из таблицы scenario_versions (по version_number DESC): номер версии и change_summary. Также текущая версия из generated_scenarios.current_version.',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-createDraft': {
+                id: 'tool-createDraft',
+                name: 'createUpdateDraft',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Формирует черновик изменений в существующий сценарий. Вызывается когда пользователь хочет отредактировать, изменить, доработать или исправить сценарий. После вызова LLM должна показать план изменений и спросить подтверждение.',
+                params: [{
+                    name: 'scenarioName',
+                    type: 'String',
+                    desc: 'Точное название сценария'
+                }, {
+                    name: 'proposedChangesDescription',
+                    type: 'String',
+                    desc: 'Максимально подробное описание ВСЕХ требуемых изменений'
+                }],
+                returnToLLM: '1. Все предыдущие незавершённые черновики в этой сессии отменяются (status → CANCELLED в таблице pending_scenario_edits).\n2. Создаётся запись в pending_scenario_edits: scenario_id, session_id, operation_type = \'EDIT\', requested_changes, status = \'PENDING\'.\n3. В LLM возвращается: «Черновик создан. Сформулируй план изменений и спроси подтверждение.»',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-commitUpdate': {
+                id: 'tool-commitUpdate',
+                name: 'commitUpdate',
+                group: 'tg-scenario',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Подтверждает и применяет ранее созданный черновик изменений или откат. ТОЛЬКО после явного подтверждения пользователя. НИКОГДА не вызывается без предварительного createUpdateDraft или rollbackToVersion.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                immediateAction: '1. Ищет запись со статусом PENDING в таблице pending_scenario_edits для данной сессии и сценария.\n2. Сохраняет текущую версию кода в таблицу scenario_versions (version_number, backend_code, frontend_code, description).\n3. Если операция EDIT:\n   • Запускает FullStackAgent в режиме редактирования — передаёт текущий код + описание изменений.\n   • Обновляет backend_code, frontend_code в таблице generated_scenarios.\n   • Увеличивает current_version на 1.\n4. Если операция ROLLBACK:\n   • Берёт код из таблицы scenario_versions по target_version_number.\n   • Восстанавливает backend_code, frontend_code, description.\n   • Увеличивает current_version на 1.\n5. Очищает сохранённое состояние сценария (таблица scenario_states).\n6. Деплоит обновлённый код на Runtime-сервер.\n7. Обновляет статус черновика → CONFIRMED.',
+                immediateExample: "Сценарий 'Регистрация участников' обновлён до v3 и запущен!",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-rollback': {
+                id: 'tool-rollback',
+                name: 'rollbackToVersion',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Создаёт черновик отката сценария до указанной версии. После вызова LLM должна сообщить текущую и целевую версии и спросить подтверждение. Для применения используется commitUpdate.',
+                params: [{
+                    name: 'scenarioName',
+                    type: 'String',
+                    desc: 'Точное название сценария'
+                }, {name: 'versionNumber', type: 'int', desc: 'Номер версии для отката'}],
+                returnToLLM: '1. Проверяет существование версии в таблице scenario_versions.\n2. Проверяет, что целевая версия ≠ текущая (generated_scenarios.current_version).\n3. Отменяет предыдущие PENDING-черновики.\n4. Создаёт запись в pending_scenario_edits: operation_type = \'ROLLBACK\', target_version_number, status = \'PENDING\'.\n5. Возвращает в LLM: «Черновик отката с vN на vM создан. Спроси подтверждение.»',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-restart': {
+                id: 'tool-restart',
+                name: 'restartScenario',
+                group: 'tg-scenario',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Перезапускает сценарий без изменений кода (повторный деплой на Runtime). Используется когда «перезапусти», «рестарт», «сломался».',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                immediateAction: '1. Берёт текущий код из generated_scenarios (backend_code, frontend_code).\n2. Повторно отправляет код на Runtime-сервер.\n3. Переводит сессию в EXECUTION, устанавливает active_scenario_id.\n4. Формирует ответ с URL.',
+                immediateExample: "Сценарий 'Регистрация участников' перезапущен.",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-stop': {
+                id: 'tool-stop',
+                name: 'stopScenario',
+                group: 'tg-scenario',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Останавливает сценарий и возвращает сессию в свободный режим. Сценарий НЕ удаляется.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                immediateAction: '1. Переводит сессию в FREE: session_mode = \'FREE\', active_scenario_id = NULL в user_chat_sessions.\n2. Формирует ответ.',
+                immediateExample: "Сценарий 'Регистрация участников' остановлен. Чем ещё могу помочь?",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-delete': {
+                id: 'tool-delete',
+                name: 'deleteScenario',
+                group: 'tg-scenario',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Удаляет сценарий полностью. Если сценарий запущен — сначала останавливает. LLM должна спросить подтверждение.',
+                params: [{name: 'scenarioName', type: 'String', desc: 'Точное название сценария'}],
+                immediateAction: '1. Если сценарий активен в сессии — сбрасывает в FREE.\n2. Удаляет запись из generated_scenarios. Каскадно удаляются scenario_versions, pending_scenario_edits, scenario_states.\n3. Формирует ответ.',
+                immediateExample: "Сценарий 'Регистрация участников' удалён.",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-duplicate': {
+                id: 'tool-duplicate',
+                name: 'duplicateScenario',
+                group: 'tg-scenario',
+                returnBehavior: 'TO_LLM',
+                description: 'Создаёт копию существующего сценария с новым названием.',
+                params: [{
+                    name: 'scenarioName',
+                    type: 'String',
+                    desc: 'Точное название исходного сценария'
+                }, {name: 'newName', type: 'String', desc: 'Название для копии (уникальное)'}],
+                returnToLLM: '1. Проверяет уникальность нового названия в generated_scenarios.\n2. Создаёт новую запись: копирует description, backend_code, frontend_code. current_version = 1, is_active = true.\n3. Возвращает в LLM: «Создана копия. Можно запустить или отредактировать.»',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-createScheduler': {
+                id: 'tool-createScheduler',
+                name: 'createScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Создаёт новый шедулер (фоновую cron-задачу) по описанию пользователя.',
+                params: [{
+                    name: 'name',
+                    type: 'String',
+                    desc: 'Краткое название шедулера (3-5 слов)'
+                }, {
+                    name: 'description',
+                    type: 'String',
+                    desc: 'Полное описание: что делает, периодичность, таблицы, API, логика'
+                }],
+                immediateAction: '1. Проверяет уникальность названия в generated_schedulers.\n2. Запускает SchedulerAgent для генерации кода.\n3. Сохраняет в generated_schedulers: name, description, scheduler_code, status = \'ACTIVE\', current_version = 1.\n4. Отправляет на Runtime для запуска cron-задачи.\n5. При ошибке: status = \'STOPPED\', код остаётся в БД.',
+                immediateExample: "Шедулер 'Ежедневная рассылка' создан и запущен!",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-stopScheduler': {
+                id: 'tool-stopScheduler',
+                name: 'stopScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Останавливает запущенный шедулер.',
+                params: [{name: 'schedulerName', type: 'String', desc: 'Точное название шедулера'}],
+                immediateAction: '1. Отправляет запрос на Runtime для остановки cron-задачи.\n2. Обновляет status = \'STOPPED\' в generated_schedulers.',
+                immediateExample: "Шедулер 'Ежедневная рассылка' остановлен.",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-startScheduler': {
+                id: 'tool-startScheduler',
+                name: 'startScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Запускает ранее остановленный шедулер.',
+                params: [{name: 'schedulerName', type: 'String', desc: 'Точное название шедулера'}],
+                immediateAction: '1. Берёт код из generated_schedulers (scheduler_code).\n2. Отправляет на Runtime.\n3. Обновляет status = \'ACTIVE\'.',
+                immediateExample: "Шедулер 'Ежедневная рассылка' запущен.",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-deleteScheduler': {
+                id: 'tool-deleteScheduler',
+                name: 'deleteScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Удаляет шедулер полностью. LLM должна спросить подтверждение.',
+                params: [{name: 'schedulerName', type: 'String', desc: 'Точное название шедулера'}],
+                immediateAction: '1. Останавливает cron-задачу на Runtime.\n2. Удаляет из generated_schedulers. Каскадно удаляются scheduler_versions.',
+                immediateExample: "Шедулер 'Ежедневная рассылка' удалён.",
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-inspectScheduler': {
+                id: 'tool-inspectScheduler',
+                name: 'inspectScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'TO_LLM',
+                description: 'Возвращает информацию о шедулере: описание, версию, статус.',
+                params: [{name: 'schedulerName', type: 'String', desc: 'Точное название шедулера'}],
+                returnToLLM: 'Данные из generated_schedulers: name, status (ACTIVE/STOPPED), current_version, description.',
+                usedBy: ['agent-free', 'agent-exec']
+            },
+            'tool-editScheduler': {
+                id: 'tool-editScheduler',
+                name: 'editScheduler',
+                group: 'tg-scheduler',
+                returnBehavior: 'IMMEDIATE',
+                description: 'Редактирует шедулер. Генерирует новый код и сразу применяет без отдельного подтверждения.',
+                params: [{name: 'schedulerName', type: 'String', desc: 'Точное название шедулера'}, {
+                    name: 'changes',
+                    type: 'String',
+                    desc: 'Подробное описание изменений'
+                }],
+                immediateAction: '1. Сохраняет текущую версию в scheduler_versions.\n2. Запускает SchedulerAgent в режиме редактирования.\n3. Обновляет scheduler_code, увеличивает current_version в generated_schedulers.\n4. Деплоит на Runtime, status = \'ACTIVE\'.',
+                immediateExample: "Шедулер 'Ежедневная рассылка' обновлён до v2 и перезапущен.",
+                usedBy: ['agent-free', 'agent-exec']
+            }
+        }
+    };
+
+    function toolLabel(t) {
+        return t.name + '(' + t.params.map(p => p.name).join(', ') + ')'
+    }
+
+    function buildGraph() {
+        const N = [], E = [];
+        const S = t => ({
+            entry: {
+                color: {
+                    background: '#0c3344',
+                    border: '#22d3ee',
+                    highlight: {background: '#124455', border: '#67e8f9'}
+                },
+                font: {color: '#e2e8f0', size: 14, face: 'Manrope'},
+                shape: 'box',
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                margin: 14,
+                shadow: {enabled: true, color: 'rgba(34,211,238,.15)', size: 14}
+            },
+            mode: {
+                color: {
+                    background: '#1e3a5f',
+                    border: '#3b82f6',
+                    highlight: {background: '#264d7a', border: '#60a5fa'}
+                },
+                font: {color: '#e2e8f0', size: 15, face: 'Manrope'},
+                shape: 'box',
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                margin: 12
+            },
+            assistant: {
+                color: {
+                    background: '#2d1f5e',
+                    border: '#a78bfa',
+                    highlight: {background: '#3b2a7a', border: '#c4b5fd'}
+                },
+                font: {color: '#e2e8f0', size: 14, face: 'Manrope'},
+                shape: 'box',
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                margin: 12,
+                shadow: {enabled: true, color: 'rgba(139,92,246,.15)', size: 12}
+            },
+            toolgroup: {
+                color: {
+                    background: '#3d2510',
+                    border: '#fb923c',
+                    highlight: {background: '#4d3018', border: '#fdba74'}
+                },
+                font: {color: '#e2e8f0', size: 12, face: 'Manrope'},
+                shape: 'box',
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                margin: 10
+            },
+            'tool-immediate': {
+                color: {
+                    background: '#3b2f10',
+                    border: '#f59e0b',
+                    highlight: {background: '#4a3b18', border: '#fbbf24'}
+                },
+                font: {color: '#fbbf24', size: 10, face: 'JetBrains Mono'},
+                shape: 'box',
+                borderWidth: 1,
+                borderWidthSelected: 2,
+                margin: {top: 6, bottom: 6, left: 10, right: 10}
+            },
+            'tool-tollm': {
+                color: {
+                    background: '#0d3024',
+                    border: '#10b981',
+                    highlight: {background: '#154038', border: '#34d399'}
+                },
+                font: {color: '#34d399', size: 10, face: 'JetBrains Mono'},
+                shape: 'box',
+                borderWidth: 1,
+                borderWidthSelected: 2,
+                margin: {top: 6, bottom: 6, left: 10, right: 10}
+            },
+            'internal-agent': {
+                color: {
+                    background: '#3d1532',
+                    border: '#ec4899',
+                    highlight: {background: '#4d1e42', border: '#f472b6'}
+                },
+                font: {color: '#e2e8f0', size: 13, face: 'Manrope'},
+                shape: 'box',
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                margin: 10,
+                shadow: {enabled: true, color: 'rgba(236,72,152,.12)', size: 10}
+            },
+            'internal-tool': {
+                color: {
+                    background: '#2d1028',
+                    border: '#f472b6',
+                    highlight: {background: '#3d1838', border: '#f9a8d4'}
+                },
+                font: {color: '#f472b6', size: 10, face: 'JetBrains Mono'},
+                shape: 'box',
+                borderWidth: 1,
+                borderWidthSelected: 2,
+                margin: {top: 6, bottom: 6, left: 10, right: 10}
+            }
+        }[t]);
+        const eBase = {
+            arrows: 'to',
+            color: {color: '#2a3550', highlight: '#60a5fa', opacity: .7},
+            width: 1.5,
+            smooth: {type: 'cubicBezier', roundness: .3}
+        };
+        const eL = l => ({font: {size: 9, color: '#5a6a8a', strokeWidth: 0}, label: l});
+
+        N.push({id: 'entry-point', label: '💬 Сообщение\nпользователя', ...S('entry'), level: 0});
+        N.push({id: 'mode-free', label: '⚡ FREE', ...S('mode'), level: 1});
+        N.push({id: 'mode-exec', label: '⚡ EXECUTION', ...S('mode'), level: 1});
+        E.push({from: 'entry-point', to: 'mode-free', ...eBase, ...eL('session_mode\n= FREE')});
+        E.push({from: 'entry-point', to: 'mode-exec', ...eBase, ...eL('session_mode\n= EXECUTION')});
+        N.push({id: 'agent-free', label: '🤖 FreeAgent', ...S('assistant'), level: 2});
+        N.push({id: 'agent-exec', label: '🤖 ExecutionAgent', ...S('assistant'), level: 2});
+        E.push({from: 'mode-free', to: 'agent-free', ...eBase});
+        E.push({from: 'mode-exec', to: 'agent-exec', ...eBase});
+        Object.values(DATA.toolGroups).forEach(g => {
+            N.push({id: g.id, label: '📦 ' + g.name, ...S('toolgroup'), level: 3})
+        });
+        DATA.assistants['agent-free'].toolGroups.forEach(tg => {
+            E.push({from: 'agent-free', to: tg, ...eBase, color: {...eBase.color, color: '#4a3570'}})
+        });
+        DATA.assistants['agent-exec'].toolGroups.forEach(tg => {
+            E.push({from: 'agent-exec', to: tg, ...eBase, color: {...eBase.color, color: '#4a3570'}})
+        });
+        Object.values(DATA.tools).forEach(t => {
+            const im = t.returnBehavior === 'IMMEDIATE';
+            N.push({
+                id: t.id,
+                label: (im ? '⚡ ' : '↩ ') + toolLabel(t), ...S(im ? 'tool-immediate' : 'tool-tollm'),
+                level: 4
+            })
+        });
+        Object.values(DATA.toolGroups).forEach(g => {
+            g.tools.forEach(tid => {
+                E.push({from: g.id, to: tid, ...eBase, width: 1, color: {...eBase.color, color: '#223040'}})
+            })
+        });
+        const dash = {dashes: [4, 4], color: {...eBase.color, color: '#6b2f5a'}};
+        Object.values(DATA.internalAgents).forEach(a => {
+            N.push({id: a.id, label: '🧠 ' + a.name, ...S('internal-agent'), level: 5});
+            const it = a.internalTool;
+            N.push({
+                id: it.id,
+                label: '🔧 ' + it.name + '(' + it.params.map(p => p.name).join(', ') + ')', ...S('internal-tool'),
+                level: 6
+            });
+            E.push({from: a.id, to: it.id, ...eBase, color: {...eBase.color, color: '#6b2f5a'}, ...eL('вызывает')});
+        });
+        E.push({from: 'tool-createScenario', to: 'agent-fullstack', ...eBase, ...dash, ...eL('генерирует код')});
+        E.push({from: 'tool-commitUpdate', to: 'agent-fullstack', ...eBase, ...dash, ...eL('редактирует код')});
+        E.push({from: 'tool-createScheduler', to: 'agent-scheduler', ...eBase, ...dash, ...eL('генерирует код')});
+        E.push({from: 'tool-editScheduler', to: 'agent-scheduler', ...eBase, ...dash, ...eL('редактирует код')});
+        return {nodes: N, edges: E};
+    }
+
+    function findNodeData(id) {
+        for (const g of [DATA.entry, DATA.modes, DATA.assistants, DATA.toolGroups, DATA.tools, DATA.internalAgents]) for (const i of Object.values(g)) {
+            if (i.id === id) return i;
+            if (i.internalTool && i.internalTool.id === id) return i.internalTool
+        }
+        return null
+    }
+
+    function bC(t, r) {
+        const m = {
+            entry: 'badge-entry',
+            mode: 'badge-mode',
+            assistant: 'badge-assistant',
+            toolgroup: 'badge-toolgroup',
+            'internal-agent': 'badge-internal',
+            'internal-tool': 'badge-internal-tool'
+        };
+        return m[t] || (r === 'IMMEDIATE' ? 'badge-tool-immediate' : 'badge-tool-tollm')
+    }
+
+    function bL(t, r) {
+        const m = {
+            entry: 'Точка входа',
+            mode: 'Режим сессии',
+            assistant: 'Агент',
+            toolgroup: 'Группа тулов',
+            'internal-agent': 'Генератор кода',
+            'internal-tool': 'Внутренний тул'
+        };
+        return m[t] || (r === 'IMMEDIATE' ? 'Tool · IMMEDIATE' : 'Tool · TO_LLM')
+    }
+
+    function esc(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+
+    function renderDetail(d) {
+        if (!d) return;
+        const el = document.getElementById('detail-content');
+        document.getElementById('detail-empty').style.display = 'none';
+        el.style.display = 'block';
+        const t = d.type || (d.returnBehavior ? 'tool' : 'unknown');
+        let h = '';
+        h += `<div class="detail-title">${d.name}</div><div class="detail-type-badge ${bC(t, d.returnBehavior)}">${bL(t, d.returnBehavior)}</div>`;
+        h += `<div class="detail-section"><div class="detail-section-title">Описание</div><div class="detail-description">${d.description}</div></div>`;
+        if (t === 'entry') {
+            if (d.examples) {
+                h += `<div class="detail-section"><div class="detail-section-title">Примеры сообщений</div><div class="example-messages">`;
+                d.examples.forEach(e => {
+                    h += `<div class="example-msg">${e}</div>`
+                });
+                h += `</div></div>`
+            }
+            if (d.routingLogic) h += `<div class="detail-section"><div class="detail-section-title">Логика маршрутизации</div><div class="detail-description">${d.routingLogic}</div></div>`;
+        }
+        if (t === 'mode' && d.agent) {
+            const a = DATA.assistants[d.agent];
+            if (a) h += `<div class="detail-section"><div class="detail-section-title">Направляется в агент</div><div class="connection-list"><div class="connection-item" onclick="selectNode('${a.id}')"><div class="connection-dot" style="background:var(--agent-color)"></div><span class="connection-name">${a.name}</span></div></div></div>`
+        }
+        if (t === 'tool' || d.returnBehavior) {
+            if (d.params && d.params.length) {
+                h += `<div class="detail-section"><div class="detail-section-title">Параметры</div><table class="params-table"><thead><tr><th>Имя</th><th>Тип</th><th>Описание</th></tr></thead><tbody>`;
+                d.params.forEach(p => {
+                    h += `<tr><td class="param-name">${p.name}</td><td class="param-type">${p.type}</td><td class="param-desc">${p.desc}</td></tr>`
+                });
+                h += `</tbody></table></div>`
+            }
+            h += `<div class="detail-section"><div class="detail-section-title">Return Behavior</div>`;
+            if (d.returnBehavior === 'IMMEDIATE') {
+                h += `<div class="return-behavior-box rb-immediate"><div class="rb-icon">⚡</div><div class="rb-text"><strong>IMMEDIATE</strong> — результат работы тула НЕ отправляется обратно в LLM для обработки. Вместо этого тул самостоятельно формирует готовый ответ пользователю с заранее определённым текстом. Пользователь получает этот фиксированный ответ напрямую в чат — LLM больше не участвует в формировании ответа.<div class="rb-example"><strong>Пример ответа в чат:</strong> «${d.immediateExample || 'Операция выполнена.'}»</div></div></div>`;
+                if (d.immediateAction) h += `<div style="margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7;white-space:pre-line"><strong style="color:var(--accent-amber)">Что происходит при вызове:</strong>\n${d.immediateAction}</div>`;
+            } else {
+                h += `<div class="return-behavior-box rb-tollm"><div class="rb-icon">↩</div><div class="rb-text"><strong>TO_LLM (по умолчанию)</strong> — после выполнения тул возвращает текстовую строку с результатом обратно в LLM. LLM получает этот результат, анализирует его и самостоятельно генерирует финальный ответ пользователю на естественном языке. Таким образом, LLM выступает «переводчиком» сырых данных в понятный пользователю текст.<div class="rb-example"><strong>Пример:</strong> тул inspectScenarioCode возвращает в LLM исходный код сценария → LLM анализирует код и отвечает: «Кнопка "Далее" зелёного цвета, background: #10b981»</div></div></div>`;
+                if (d.returnToLLM) h += `<div style="margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7;white-space:pre-line"><strong style="color:var(--accent-green)">Что возвращается в LLM:</strong>\n${d.returnToLLM}</div>`;
+            }
+            h += `</div>`;
+            if (d.usedBy) {
+                h += `<div class="detail-section"><div class="detail-section-title">Доступен в агентах</div><div class="connection-list">`;
+                d.usedBy.forEach(aId => {
+                    const a = DATA.assistants[aId];
+                    if (a) h += `<div class="connection-item" onclick="selectNode('${aId}')"><div class="connection-dot" style="background:var(--agent-color)"></div><span class="connection-name">${a.name}</span></div>`
+                });
+                h += `</div></div>`
+            }
+        }
+        if (t === 'assistant') {
+            if (d.memory) h += `<div class="detail-section"><div class="detail-section-title">Память чата</div><div class="detail-description">${d.memory}</div></div>`;
+            if (d.templateVars) {
+                h += `<div class="detail-section"><div class="detail-section-title">Переменные шаблона</div>`;
+                d.templateVars.forEach(v => {
+                    h += `<div class="template-var-item"><div class="template-var-name">{{${v.name}}}</div><div class="template-var-desc">${v.desc}</div></div>`
+                });
+                h += `</div>`
+            }
+            if (d.toolGroups) {
+                h += `<div class="detail-section"><div class="detail-section-title">Подключённые группы тулов</div><div class="connection-list">`;
+                d.toolGroups.forEach(tgId => {
+                    const tg = DATA.toolGroups[tgId];
+                    if (tg) h += `<div class="connection-item" onclick="selectNode('${tgId}')"><div class="connection-dot" style="background:var(--toolgroup-color)"></div><span class="connection-name">${tg.name}</span><span style="color:var(--text-dim);font-size:10px;margin-left:auto">${tg.tools.length} тулов</span></div>`
+                });
+                h += `</div></div>`
+            }
+            if (d.systemPrompt) h += `<div class="detail-section"><div class="detail-section-title">Системный промпт</div><div class="prompt-placeholder">${esc(d.systemPrompt)}</div></div>`;
+        }
+        if (t === 'toolgroup') {
+            if (d.tools) {
+                h += `<div class="detail-section"><div class="detail-section-title">Тулы в группе (${d.tools.length})</div><div class="connection-list">`;
+                d.tools.forEach(tid => {
+                    const tt = DATA.tools[tid];
+                    if (tt) {
+                        const im = tt.returnBehavior === 'IMMEDIATE';
+                        h += `<div class="connection-item" onclick="selectNode('${tid}')"><div class="connection-dot" style="background:${im ? 'var(--tool-immediate)' : 'var(--tool-tollm)'}"></div><span class="connection-name" style="font-family:'JetBrains Mono',monospace;font-size:12px">${toolLabel(tt)}</span><span style="color:var(--text-dim);font-size:9px;margin-left:auto;text-transform:uppercase">${tt.returnBehavior}</span></div>`
+                    }
+                });
+                h += `</div></div>`
+            }
+            if (d.onlyIn) {
+                h += `<div class="detail-section"><div class="detail-section-title">Доступна в агентах</div><div class="connection-list">`;
+                d.onlyIn.forEach(aId => {
+                    const a = DATA.assistants[aId];
+                    if (a) h += `<div class="connection-item" onclick="selectNode('${aId}')"><div class="connection-dot" style="background:var(--agent-color)"></div><span class="connection-name">${a.name}</span></div>`
+                });
+                h += `</div></div>`
+            }
+        }
+        if (t === 'internal-agent') {
+            if (d.internalTool) {
+                const it = d.internalTool;
+                h += `<div class="detail-section"><div class="detail-section-title">Внутренний тул</div><div class="connection-item" onclick="selectNode('${it.id}')" style="margin-bottom:8px"><div class="connection-dot" style="background:var(--internal-tool)"></div><span class="connection-name" style="font-family:'JetBrains Mono',monospace;font-size:12px">${it.name}(${it.params.map(p => p.name).join(', ')})</span></div><div style="font-size:12px;color:var(--text-dim);line-height:1.6">${it.description}</div></div>`
+            }
+            if (d.systemPrompt) h += `<div class="detail-section"><div class="detail-section-title">Системный промпт</div><div class="prompt-placeholder">${esc(d.systemPrompt)}</div></div>`;
+        }
+        if (t === 'internal-tool') {
+            if (d.parentAgent) h += `<div class="detail-section"><div class="detail-section-title">Принадлежит агенту</div><div style="font-size:13px;color:var(--accent-pink);font-weight:600">${d.parentAgent}</div></div>`;
+            if (d.params && d.params.length) {
+                h += `<div class="detail-section"><div class="detail-section-title">Параметры</div><table class="params-table"><thead><tr><th>Имя</th><th>Тип</th><th>Описание</th></tr></thead><tbody>`;
+                d.params.forEach(p => {
+                    h += `<tr><td class="param-name">${p.name}</td><td class="param-type">${p.type}</td><td class="param-desc">${p.desc}</td></tr>`
+                });
+                h += `</tbody></table></div>`
+            }
+        }
+        el.innerHTML = h;
+    }
+
+    function buildCatalog() {
+        const c = document.getElementById('catalog-list');
+        let h = '';
+        h += cG('Точка входа', Object.values(DATA.entry), 'entry');
+        h += cG('Режимы сессии', Object.values(DATA.modes), 'mode');
+        h += cG('Агенты', Object.values(DATA.assistants), 'assistant');
+        h += cG('Группы тулов', Object.values(DATA.toolGroups), 'toolgroup');
+        Object.values(DATA.toolGroups).forEach(g => {
+            h += cG('Тулы · ' + g.name, g.tools.map(tid => DATA.tools[tid]).filter(Boolean), 'tool')
+        });
+        h += cG('Генераторы кода', Object.values(DATA.internalAgents), 'internal-agent');
+        c.innerHTML = h;
+    }
+
+    function cG(title, items, type) {
+        let h = `<div class="catalog-group" data-group="${type}"><div class="catalog-group-title">${title}<div class="catalog-group-line"></div></div>`;
+        items.forEach(i => {
+            h += `<div class="catalog-item" data-id="${i.id}" data-search="${(i.name + ' ' + i.description).toLowerCase()}" onclick="selectNode('${i.id}')"><div class="catalog-item-header"><span class="catalog-item-name">${i.name}</span><span class="catalog-item-badge ${bC(i.type || type, i.returnBehavior)}">${i.returnBehavior || bL(i.type || type)}</span></div><div class="catalog-item-desc">${i.description}</div></div>`
+        });
+        return h + '</div>'
+    }
+
+    function filterCatalog(q) {
+        q = q.toLowerCase().trim();
+        document.querySelectorAll('.catalog-item').forEach(el => {
+            el.style.display = (!q || el.dataset.search.includes(q)) ? '' : 'none'
+        });
+        document.querySelectorAll('.catalog-group').forEach(g => {
+            g.style.display = g.querySelector('.catalog-item:not([style*="display: none"])') ? '' : 'none'
+        })
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.panel-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.getElementById('panel-detail').style.display = tab === 'detail' ? '' : 'none';
+        document.getElementById('panel-catalog').style.display = tab === 'catalog' ? '' : 'none'
+    }
+
+    let network;
+
+    function selectNode(id) {
+        switchTab('detail');
+        renderDetail(findNodeData(id));
+        if (network) {
+            network.selectNodes([id]);
+            network.focus(id, {scale: 1.1, animation: {duration: 400, easingFunction: 'easeInOutQuad'}})
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const {nodes, edges} = buildGraph();
+        network = new vis.Network(document.getElementById('network'), {
+            nodes: new vis.DataSet(nodes),
+            edges: new vis.DataSet(edges)
+        }, {
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    levelSeparation: 260,
+                    nodeSpacing: 46,
+                    treeSpacing: 65,
+                    blockShifting: true,
+                    edgeMinimization: true,
+                    parentCentralization: true
+                }
+            },
+            physics: {enabled: false},
+            interaction: {hover: true, tooltipDelay: 200, zoomView: true, dragView: true, keyboard: {enabled: true}},
+            edges: {font: {align: 'middle'}}
+        });
+        network.on('click', p => {
+            if (p.nodes.length) {
+                switchTab('detail');
+                renderDetail(findNodeData(p.nodes[0]))
+            }
+        });
+        network.on('doubleClick', p => {
+            if (p.nodes.length) network.focus(p.nodes[0], {
+                scale: 1.5,
+                animation: {duration: 400, easingFunction: 'easeInOutQuad'}
+            })
+        });
+        buildCatalog();
+        setTimeout(() => network.fit({animation: {duration: 600, easingFunction: 'easeInOutQuad'}}), 300);
+    });
+</script>
+</body>
+</html>
